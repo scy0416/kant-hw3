@@ -1,0 +1,6 @@
+[
+  {"case_id":"normal-a","status":"ok","latency_ms":100,"total_tokens":30,"cost_usd":0.001,"feedback":true},
+  {"case_id":"normal-b","status":"ok","latency_ms":200,"total_tokens":40,"cost_usd":0.002,"feedback":null},
+  {"case_id":"schema-error","status":"error","latency_ms":300,"total_tokens":50,"cost_usd":0.003,"feedback":false},
+  {"case_id":"timeout","status":"error","latency_ms":400,"total_tokens":null,"cost_usd":null,"feedback":null}
+]
