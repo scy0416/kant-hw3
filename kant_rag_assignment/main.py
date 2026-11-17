@@ -74,17 +74,20 @@ def search(client, embedder, question, category, top_k=2):
 def rewrite_query(question, aliases):
     rewritten = question
     for alias, formal_name in aliases.items():
-        rewritten = todo("현재 문자열에서 alias를 formal_name으로 바꾸세요.")
+        #rewritten = todo("현재 문자열에서 alias를 formal_name으로 바꾸세요.")
+        rewritten = rewritten.replace(alias, formal_name)
     return rewritten
 
 
 def answer_question(question, rows, generate):
     if not rows:
         return {"answer": "확인할 문서가 없습니다.", "citations": [], "needs_human": True}
-    context = todo("각 검색 결과를 [chunk_id] 본문으로 묶고 빈 줄로 연결하세요.")
+    #context = todo("각 검색 결과를 [chunk_id] 본문으로 묶고 빈 줄로 연결하세요.")
+    context = "\n".join([f"[{row['chunk_id']}] {row['text']}" for row in rows])
     reply = support.validate_shape(generate(question, context))
     allowed = {row["chunk_id"] for row in rows}
-    if todo("검색 결과에 없는 출처가 하나라도 있는지 검사하세요."):
+    #if todo("검색 결과에 없는 출처가 하나라도 있는지 검사하세요."):
+    if set(reply["citations"]) - set(row["chunk_id"] for row in rows):
         raise ValueError("검색하지 않은 출처가 있습니다.")
     if reply["needs_human"] == bool(reply["citations"]):
         raise ValueError("답변에는 출처가 필요하며 담당자 확인에는 출처를 비웁니다.")
@@ -92,13 +95,31 @@ def answer_question(question, rows, generate):
 
 
 def make_golden():
-    return todo("답이 있는 사례와 자료가 없는 사례를 하나씩 작성하세요.")
+    #return todo("답이 있는 사례와 자료가 없는 사례를 하나씩 작성하세요.")
+    given_question = {
+        "question_id": "given-vpn",
+        "question": "초록문을 위해서는 어느 팀에 승인을 받아야 하나요?",
+        "category": "access",
+        "reference_answer": "VPN 원격 접속을 사용하려면 보안팀에 승인을 요청해야 합니다.",
+        "relevant_document_ids": ["vpn"],
+        "required_terms": ["보안팀"],
+    }
+    ungiven_question = {
+        "question_id": "ungiven-docker",
+        "question": "docker는 무슨 버전을 사용해야하나요?",
+        "category": "overseas",
+        "reference_answer": "docker에 대한 자료가 없습니다.",
+        "relevant_document_ids": [],
+        "required_terms": [],
+    }
+    return [given_question, ungiven_question]
 
 
 def measure(case, rows, reply):
     expected = set(case["relevant_document_ids"])
     found = {row["document_id"] for row in rows}
-    recall = todo("필요한 문서 중 찾은 비율을 계산하세요. 필요한 문서가 없으면 None입니다.")
+    #recall = todo("필요한 문서 중 찾은 비율을 계산하세요. 필요한 문서가 없으면 None입니다.")
+    recall = len(found) / len(expected) if len(expected) > 0 else None
     answer_ok = (all(term in reply["answer"] for term in case["required_terms"])
                  and not reply["needs_human"]) if expected else reply["needs_human"]
     failure = "없음"
