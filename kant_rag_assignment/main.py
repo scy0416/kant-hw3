@@ -15,24 +15,40 @@ def prepare_chunks(documents):
         seen = set()
         number = 0
         for paragraph in document["paragraphs"]:
-            text = todo("문단의 연속 공백을 한 칸으로 정리하세요.")
+            #text = todo("문단의 연속 공백을 한 칸으로 정리하세요.")
+            text = " ".join(paragraph.split())
             if not text or text == "KANT NEXT | 내부 문서" or text in seen:
                 continue
             seen.add(text)
-            chunk = todo("문서 정보 5개와 chunk_id, text를 담은 사전을 만드세요.")
+            #chunk = todo("문서 정보 5개와 chunk_id, text를 담은 사전을 만드세요.")
+            chunk = {
+                "document_id": document["document_id"],
+                "title": document["title"],
+                "category": document["category"],
+                "status": document["status"],
+                "source": document["source"],
+                "text": text,
+                "chunk_id": f"{document["document_id"]}:{number}",
+            }
             chunks.append(chunk)
             number += 1
+    ####################################################################################################
     # 이유: 문단을 유지하는 이유와 보존해야 할 메타데이터를 한두 줄로 적으세요.
+    ####################################################################################################
+    #
+    ####################################################################################################
     return chunks
 
 
 def build_index(chunks, embedder):
     texts = ["passage: " + row["title"] + "\n" + row["text"] for row in chunks]
-    vectors = todo("texts를 정규화된 문서 벡터로 바꾸세요.")
+    #vectors = todo("texts를 정규화된 문서 벡터로 바꾸세요.")
+    vectors = embedder.encode(texts, normalize_embeddings=True)
     client = support.empty_store(len(vectors[0]))
     points = []
     for i, (row, vector) in enumerate(zip(chunks, vectors, strict=True)):
-        point = todo("i, vector, row를 Qdrant PointStruct에 연결하세요.")
+        #point = todo("i, vector, row를 Qdrant PointStruct에 연결하세요.")
+        point = models.PointStruct(id=i, vector=vector, payload=row)
         points.append(point)
     client.upsert(collection_name="devdesk", points=points, wait=True)
     return client
@@ -42,7 +58,13 @@ def search(client, embedder, question, category, top_k=2):
     if type(top_k) is not int or not 1 <= top_k <= 5:
         raise ValueError("top_k는 1~5의 정수여야 합니다.")
     vector = embedder.encode(["query: " + question], normalize_embeddings=True)[0]
-    scope = todo("현행 문서이면서 지정한 category인 Qdrant 필터를 만드세요.")
+    #scope = todo("현행 문서이면서 지정한 category인 Qdrant 필터를 만드세요.")
+    scope = models.Filter(
+        must=[
+            models.FieldCondition(key="category", match=models.MatchValue(value=category)),
+            models.FieldCondition(key="status", match=models.MatchValue(value="current"))
+        ]
+    )
     hits = client.query_points(collection_name="devdesk", query=list(vector),
                                query_filter=scope, limit=top_k, with_payload=True).points
     return [{**hit.payload, "score": hit.score} for hit in hits]
