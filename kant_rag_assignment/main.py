@@ -134,7 +134,55 @@ def measure(case, rows, reply):
 # 선택 심화 1. 두 검색 순위를 합쳐 근거를 모으기
 def fuse_rankings(rankings, top_k=2):
     # 선택 심화: 문제의 RRF 규칙에 맞춰 직접 작성하세요.
-    return todo("검색 순위 목록을 RRF 점수로 합치세요.")
+    #return todo("검색 순위 목록을 RRF 점수로 합치세요.")
+    if not (1 <= top_k <= 5) or type(top_k) is bool:
+        raise ValueError
+    dense, keyword = rankings
+
+    id_catalog = {**{chunk["chunk_id"]: chunk["text"] for chunk in dense}, **{chunk["chunk_id"]: chunk["text"] for chunk in keyword}}
+    #print(id_catalog)
+
+    seen = []
+    proc_dense = []
+    for d in dense:
+        if d not in seen:
+            seen.append(d)
+            proc_dense.append(d["chunk_id"])
+
+    seen = []
+    proc_keyword = []
+    for k in keyword:
+        if k not in seen:
+            seen.append(k)
+            proc_keyword.append(k["chunk_id"])
+
+    chunk_ids = set(proc_dense + proc_keyword)
+
+    scores = {}
+    for chunk_id in chunk_ids:
+        scores[chunk_id] = {
+            "dense": proc_dense.index(chunk_id)+1 if chunk_id in proc_dense else None,
+            "keyword": proc_keyword.index(chunk_id)+1 if chunk_id in proc_keyword else None,
+        }
+        scores[chunk_id]["rrf"] = 0
+        scores[chunk_id]["rrf"] += 1 / (60 + scores[chunk_id]["dense"]) if scores[chunk_id]["dense"] else 0
+        scores[chunk_id]["rrf"] += 1 / (60 + scores[chunk_id]["keyword"]) if scores[chunk_id]["keyword"] else 0
+        #scores[chunk_id]["id"] = chunk_id
+
+    #print(scores)
+    #print(sorted(scores, key=lambda item: (-item["rrf"], item["id"])))
+    #print(scores.values().sort(key=lambda x: (-x["rrf"], x["id"])))
+    # print(list(scores.items()))
+    # print(list(scores.items()).sort(key=lambda x: (-x["rrf"], x["id"])))
+    scores_list = list(scores.items())
+    scores_list.sort(key=lambda x: (-x[1]["rrf"], x[0]))
+    #print(scores_list)
+    #print([item[0] for item in scores_list][:top_k])
+    print(scores_list)
+    selected_item = [(item[0], item[1]["rrf"]) for item in scores_list][:top_k]
+    revoke = [{"chunk_id": item, "text": id_catalog[item], "score": score} for item, score in selected_item]
+    print(revoke)
+    return revoke
 
 
 if __name__ == "__main__":
