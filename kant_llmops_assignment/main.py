@@ -67,7 +67,8 @@ def evaluate_case(case, record):
     action_ok = reply["action"] == expected["action"]
     required_ok = all(word in reply["answer"] for word in expected["must_include"])
     forbidden_ok = all(word not in reply["answer"] for word in expected["must_not_include"])
-    return todo("사례 평가")  # TODO: 위 세 조건과 기대 출처 집합 일치를 모두 확인하세요.
+    #return todo("사례 평가")  # TODO: 위 세 조건과 기대 출처 집합 일치를 모두 확인하세요.
+    return action_ok and required_ok and forbidden_ok and set(reply["source_ids"]) == set(expected["source_ids"])
 
 
 def summarize(records):
@@ -79,9 +80,12 @@ def summarize(records):
     costs = [row["cost_usd"] for row in records]
     tokens = [row["total_tokens"] for row in records]
     feedback = [row["feedback"] for row in records if row["feedback"] is not None]
-    error_rate = todo("오류율")  # TODO: 전체 요청 중 오류 비율. 요청이 없으면 None입니다.
-    total_cost = todo("누락 비용")  # TODO: 비용이 하나라도 None이면 None, 아니면 합계를 반환하세요.
-    positive_rate = todo("피드백 비율")  # TODO: 응답한 사람 중 True 비율. 피드백이 없으면 None입니다.
+    #error_rate = todo("오류율")  # TODO: 전체 요청 중 오류 비율. 요청이 없으면 None입니다.
+    error_rate = errors / count if count > 0 else None
+    #total_cost = todo("누락 비용")  # TODO: 비용이 하나라도 None이면 None, 아니면 합계를 반환하세요.
+    total_cost = sum(costs) if None not in costs else None
+    #positive_rate = todo("피드백 비율")  # TODO: 응답한 사람 중 True 비율. 피드백이 없으면 None입니다.
+    positive_rate = sum(feedback) / len(feedback) if feedback else None
     return {
         "requests": count, "errors": errors, "error_rate": error_rate,
         "p95_latency_ms": latencies[math.ceil(count * 0.95) - 1] if count else None,
@@ -102,7 +106,8 @@ def release_gate(baseline, candidate, cases):
                          if case["critical"] and not new[case["case_id"]]["passed"]]
     baseline_passes = sum(row["passed"] for row in old.values())
     candidate_passes = sum(row["passed"] for row in new.values())
-    approve = todo("변경 판단")  # TODO: 회귀/중요 실패가 없고, 통과 수가 감소하지 않은 경우만 허용하세요.
+    #approve = todo("변경 판단")  # TODO: 회귀/중요 실패가 없고, 통과 수가 감소하지 않은 경우만 허용하세요.
+    approve = not regressions and not critical_failures and candidate_passes >= baseline_passes
     return {"approve": approve, "regressions": regressions,
             "critical_failures": critical_failures,
             "baseline_passes": baseline_passes, "candidate_passes": candidate_passes}
