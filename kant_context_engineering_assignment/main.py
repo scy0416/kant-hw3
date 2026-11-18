@@ -14,37 +14,71 @@ def todo(message):
 # 필수 1. 필요한 자료와 사용자 기억 관리하기
 def select_context(items, user_id, now):
     kept = []
+    # print(items)
+    # print(user_id)
+    # print(now)
+    #print(items)
     for item in items:
-        allowed = todo("접근 범위, 신뢰, 현행 여부와 만료 조건")
+        #allowed = todo("접근 범위, 신뢰, 현행 여부와 만료 조건")
+        allowed = (
+            (item["user_id"] == "public" or item["user_id"] == user_id)
+            and item["trusted"]
+            and item["active"]
+            and (item["expires_at"] is None or item["expires_at"] > now)
+        )
         if allowed:
             kept.append(copy.deepcopy(item))
+    ####################################################################################################
     # 이유: 높은 우선순위의 자료를 먼저 고르면 어떤 문제가 생기는지 적으세요.
+    ####################################################################################################
+    # 높은 우선순위의 자료를 먼저 고르면 이미 만료가된 자료임에도 선택되는 경우가 발생할 수 있다.
+    ####################################################################################################
     return sorted(kept, key=lambda item: (-item["priority"], item["id"]))
 
 
 def memory_action(records, user_id, action, name, value=None):
     support.validate_memory_input(user_id, action, name, value)
     key = f"{user_id}:{name}"
+    #print(records, key, action, value)
     if action == "read":
-        return todo("현재 사용자의 기억 조회")
+        #return todo("현재 사용자의 기억 조회")
+        return copy.deepcopy(records.get(key))
     if action == "create":
         if key in records:
             raise ValueError("이미 있는 기억입니다. update를 사용하세요.")
-        records[key] = todo("새 기억 저장")
+        #records[key] = todo("새 기억 저장")
+        records[key] = copy.deepcopy(value)
     elif action == "update":
         if key not in records:
             raise KeyError("수정할 기억이 없습니다.")
-        records[key] = todo("기존 기억 수정")
+        #records[key] = todo("기존 기억 수정")
+        records[key] = copy.deepcopy(value)
     elif action == "delete":
-        return todo("현재 사용자의 기억 삭제")
+        #return todo("현재 사용자의 기억 삭제")
+        return records.pop(key) if key in records else None
     return copy.deepcopy(records[key])
 
 
 def build_messages(prefix, question, context, turns, summary):
     data = json.dumps({"reference_data": context, "summary": summary}, ensure_ascii=False)
     history = [message for turn in turns for message in turn["messages"]]
+    # print(data)
+    # print(history)
+    ####################################################################################################
     # 이유: 장기 기억과 세션 상태의 차이, 자료와 지시를 나누는 이유를 적으세요.
-    return todo("고정 지시, 참고 자료, 대화, 현재 질문 순서의 메시지")
+    ####################################################################################################
+    # 장기 기억(style)은 여러 세션 전반에 거쳐 접근할 수 있는 기억이고 세션이 끝나도 사라지지 않는다.
+    # 세션 상태(task)는 세션 내에서만 접근 가능하며 세션이 끝나면 세션 상태도 사라진다.
+    # 지시는 LLM이 따라야 하는 사항에 대한 것이고, 자료는 지시를 수행하는데 있어 참고할 수 있는 요소이다.
+    ####################################################################################################
+    #return todo("고정 지시, 참고 자료, 대화, 현재 질문 순서의 메시지")
+    return [
+        {"role": "developer", "content": prefix},
+        {"role": "user", "content": data},
+        #*[{"role": h["role"], "content": h["content"]} for h in history],
+        *history,
+        {"role": "user", "content": question},
+    ]
 
 
 # 필수 2. 긴 대화를 줄이고 반복 입력 재사용하기
