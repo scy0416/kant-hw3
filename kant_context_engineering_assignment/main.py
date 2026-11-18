@@ -83,22 +83,26 @@ def build_messages(prefix, question, context, turns, summary):
 
 # 필수 2. 긴 대화를 줄이고 반복 입력 재사용하기
 def summarize(turns):
+    #print(turns)
     summary = {}
     for turn in turns:
         for name, value in support.fact_lines(turn["messages"][0]["content"]):
-            summary[name] = todo("최신 값과 출처 턴")
+            #summary[name] = todo("최신 값과 출처 턴")
+            summary[name] = {"value": value, "source_turn_id": turn["id"]}
     return summary
 
 
 def select_window(turns, limit, reserve, margin, make_messages, count):
     support.validate_budget(limit, reserve, margin)
-    budget = todo("입력에 쓸 수 있는 예산")
+    #budget = todo("입력에 쓸 수 있는 예산")
+    budget = limit - reserve - margin
     if budget <= 0 or count(make_messages([])) > budget:
         raise ValueError("고정 입력만으로 예산을 넘었습니다.")
     kept = []
     for turn in reversed(turns):
         candidate = [turn, *kept]
-        if todo("전체 후보 입력이 예산을 넘는지"):
+        #if todo("전체 후보 입력이 예산을 넘는지"):
+        if count(make_messages(candidate)) > budget:
             break
         kept = candidate
     # 관측: 압축 비교 후 토큰 수, 빠진 사실, 선택한 한도를 기록합니다.
@@ -106,7 +110,8 @@ def select_window(turns, limit, reserve, margin, make_messages, count):
 
 
 def cache_key(prefix, user_id):
-    return todo("사용자와 고정 지시로 만드는 캐시 키")
+    #return todo("사용자와 고정 지시로 만드는 캐시 키")
+    return hashlib.sha256((user_id+"\n"+prefix).encode("utf-8")).hexdigest()
     # 관측: 실제 캐시 읽기/쓰기와 비용을 확인하고 미관측이면 그대로 적습니다.
 
 
