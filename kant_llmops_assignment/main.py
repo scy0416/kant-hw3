@@ -120,7 +120,42 @@ def release_gate(baseline, candidate, cases):
 # 선택 심화 1. 연속된 관측 구간으로 운영 대응 정하기
 def decide_rollout(windows, *, min_requests=5, max_error_rate=0.2, max_p95_ms=3000):
     """최근 두 구간의 지표로 continue, hold, rollback 중 하나를 반환합니다."""
-    return todo("선택 심화 운영 대응")
+    #return todo("선택 심화 운영 대응")
+    if len(windows) < 2:
+        return "hold"
+    #print(windows)
+    recent = windows[-2:]
+    # 유효성 검사
+    for r in recent:
+        if not isinstance(r["requests"], int) or r["requests"] < 0:
+            raise ValueError
+        if r["error_rate"] is not None and not (0 <= r["error_rate"] <= 1):
+            raise ValueError
+        if r["p95_latency_ms"] is not None and r["p95_latency_ms"] < 0 or r["p95_latency_ms"] == float("inf"):
+            raise ValueError
+
+    # 표본 부족 및 None값 검사
+    for r in recent:
+        if r["requests"] < min_requests:
+            return "hold"
+        if r["error_rate"] is None or r["p95_latency_ms"] is None:
+            return "hold"
+
+    # 악화 검사
+    is_bad = []
+    for r in recent:
+        if r["error_rate"] > max_error_rate or r["p95_latency_ms"] > max_p95_ms:
+            is_bad.append(True)
+        else:
+            is_bad.append(False)
+
+    # 전체 악화
+    if all(is_bad):
+        return "rollback"
+    elif any(is_bad):
+        return "hold"
+    else:
+        return "continue"
 
 
 if __name__ == "__main__":
