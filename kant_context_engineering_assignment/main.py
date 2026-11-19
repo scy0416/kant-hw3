@@ -117,7 +117,51 @@ def cache_key(prefix, user_id):
 
 # 선택 심화 1. 새 대화만 반영하고 변경 이력 남기기
 def merge_summary(previous, turns):
-    return todo("선택 심화: 새 턴의 요약과 변경 이력")
+    #return todo("선택 심화: 새 턴의 요약과 변경 이력")
+    #print(previous)
+    #print(turns)
+
+    # 반환하기 위한 요약 복사
+    summary = copy.deepcopy(previous)
+
+    for turn in turns:
+        turn_id = turn["id"]
+        if turn_id in summary["processed_ids"]:
+            continue
+        summary["processed_ids"].append(turn_id)
+        turn_summary = summarize([turn])
+        #print(turn_summary)
+        for name, value in turn_summary.items():
+            # print(summary)
+            # print(name, value)
+            if name in summary["current"]:
+                if summary["current"][name]["value"] == value["value"]:
+                    summary["current"][name]["source_turn_id"] = turn_id
+                else:
+                    summary["changes"].append({
+                        "name": name,
+                        "before": summary["current"][name]["value"],
+                        "after": value["value"]
+                    })
+                    summary["current"][name] = value
+            else:
+                summary["current"][name] = value
+
+    # target_turns_ids = set(turn["id"] for turn in turns if turn["id"] not in processed_ids)
+    # summary["processed_ids"] += target_turns_ids
+    # target_turns = [turn for turn in turns if turn["id"] not in processed_ids]
+    # target_summary = summarize(turns)
+    # for s_name, s_value in target_summary.items():
+    #     if s_name in summary["current"]:
+    #         summary["change"] = {
+    #             "name": s_name,
+    #             "before": summary[s_name],
+    #             "after": s_value,
+    #         }
+    #         summary["current"][s_name] = s_value
+    #     else:
+    #         summary["current"][s_name] = s_value
+    return summary
 
 
 if __name__ == "__main__":
