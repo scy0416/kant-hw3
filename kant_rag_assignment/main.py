@@ -70,7 +70,6 @@ def search(client, embedder, question, category, top_k=2):
 def rewrite_query(question, aliases):
     rewritten = question
     for alias, formal_name in aliases.items():
-        #rewritten = todo("현재 문자열에서 alias를 formal_name으로 바꾸세요.")
         rewritten = rewritten.replace(alias, formal_name)
     return rewritten
 
@@ -78,12 +77,10 @@ def rewrite_query(question, aliases):
 def answer_question(question, rows, generate):
     if not rows:
         return {"answer": "확인할 문서가 없습니다.", "citations": [], "needs_human": True}
-    #context = todo("각 검색 결과를 [chunk_id] 본문으로 묶고 빈 줄로 연결하세요.")
     context = "\n".join([f"[{row['chunk_id']}] {row['text']}" for row in rows])
     reply = support.validate_shape(generate(question, context))
     allowed = {row["chunk_id"] for row in rows}
-    #if todo("검색 결과에 없는 출처가 하나라도 있는지 검사하세요."):
-    if set(reply["citations"]) - set(row["chunk_id"] for row in rows):
+    if set(reply["citations"]) - allowed:
         raise ValueError("검색하지 않은 출처가 있습니다.")
     if reply["needs_human"] == bool(reply["citations"]):
         raise ValueError("답변에는 출처가 필요하며 담당자 확인에는 출처를 비웁니다.")
@@ -91,7 +88,6 @@ def answer_question(question, rows, generate):
 
 
 def make_golden():
-    #return todo("답이 있는 사례와 자료가 없는 사례를 하나씩 작성하세요.")
     given_question = {
         "question_id": "given-vpn",
         "question": "초록문을 위해서는 어느 팀에 승인을 받아야 하나요?",
@@ -114,8 +110,7 @@ def make_golden():
 def measure(case, rows, reply):
     expected = set(case["relevant_document_ids"])
     found = {row["document_id"] for row in rows}
-    #recall = todo("필요한 문서 중 찾은 비율을 계산하세요. 필요한 문서가 없으면 None입니다.")
-    recall = len(found) / len(expected) if len(expected) > 0 else None
+    recall = len(found & expected) / len(expected) if len(expected) > 0 else None
     answer_ok = (all(term in reply["answer"] for term in case["required_terms"])
                  and not reply["needs_human"]) if expected else reply["needs_human"]
     failure = "없음"
@@ -123,62 +118,83 @@ def measure(case, rows, reply):
         failure = "검색 누락"
     elif not answer_ok:
         failure = "답변 확인 필요" if expected else "보류 실패"
+    ####################################################################################################
     # 관측: 실제 evaluate 결과에서 개선, 악화 질문과 답변 본문을 확인해 기록합니다.
+    ####################################################################################################
+    # baseline에서는 document_recall이 0.66, answer_check는 0.75였다.
+    # rewritten에서는 document_recall, answer_check 모두 1로 상승했다.
+    # 이유는 given-vpn질문에서 발생한 것으로, 기존에는 vpn에 대한 문서가 아니라 실제 문(door)에 대한 문서가 검색되어 정답 문서가 있는 3개 중 유일하게 검색에 실패했으며,
+    # 이로 인해서 답변 확인이 활성화되어 document_recall은 2/3, answer_check는 3/4가 되었다.
+    # rewritten으로 별칭에 대한 처리를 한 후에는 정상적으로 검색되고, 답변에 문제가 발생하지 않아 document_recall, answer_check모두 1로 개선된 것을 확인했다.
+    ####################################################################################################
     return {"document_recall": recall, "answer_check": bool(answer_ok), "failure": failure}
 
 
 # 선택 심화 1. 두 검색 순위를 합쳐 근거를 모으기
 def fuse_rankings(rankings, top_k=2):
     # 선택 심화: 문제의 RRF 규칙에 맞춰 직접 작성하세요.
-    #return todo("검색 순위 목록을 RRF 점수로 합치세요.")
-    if not (1 <= top_k <= 5) or type(top_k) is bool:
+    # top_k의 유효성 검사
+    if not (1 <= top_k <= 5) or not isinstance(top_k, int):
         raise ValueError
+
+    # 랭킹 분리
     dense, keyword = rankings
 
-    id_catalog = {**{chunk["chunk_id"]: chunk["text"] for chunk in dense}, **{chunk["chunk_id"]: chunk["text"] for chunk in keyword}}
-    #print(id_catalog)
+    # 청크 룩업 생성
+    # chunk_lookup = {}
+    # for c in dense + keyword:
+    #     chunk_lookup[c["chunk_id"]] = c["text"]
+
+    #print(chunk_lookup)
+    # 각 목록의 청크 중복 제거
+    seen = []
+    clean_dense = []
+    for c in dense:
+        if c not in seen:
+            seen.append(c)
+            clean_dense.append({"chunk_id": c["chunk_id"], "text": c["text"]})
 
     seen = []
-    proc_dense = []
-    for d in dense:
-        if d not in seen:
-            seen.append(d)
-            proc_dense.append(d["chunk_id"])
+    clean_keyword = []
+    for c in keyword:
+        if c not in seen:
+            seen.append(c)
+            clean_keyword.append({"chunk_id": c["chunk_id"], "text": c["text"]})
 
-    seen = []
-    proc_keyword = []
-    for k in keyword:
-        if k not in seen:
-            seen.append(k)
-            proc_keyword.append(k["chunk_id"])
+    # 각 청크에 순위 정보 추가
+    for rank, c in enumerate(clean_dense, start=1):
+        c["dense"] = rank
 
-    chunk_ids = set(proc_dense + proc_keyword)
+    for rank, c in enumerate(clean_keyword, start=1):
+        c["keyword"] = rank
 
-    scores = {}
-    for chunk_id in chunk_ids:
-        scores[chunk_id] = {
-            "dense": proc_dense.index(chunk_id)+1 if chunk_id in proc_dense else None,
-            "keyword": proc_keyword.index(chunk_id)+1 if chunk_id in proc_keyword else None,
-        }
-        scores[chunk_id]["rrf"] = 0
-        scores[chunk_id]["rrf"] += 1 / (60 + scores[chunk_id]["dense"]) if scores[chunk_id]["dense"] else 0
-        scores[chunk_id]["rrf"] += 1 / (60 + scores[chunk_id]["keyword"]) if scores[chunk_id]["keyword"] else 0
-        #scores[chunk_id]["id"] = chunk_id
+    # dense와 keyword 병합
+    merge_chunk = []
+    for c in clean_dense:
+        merge_chunk.append(c)
 
-    #print(scores)
-    #print(sorted(scores, key=lambda item: (-item["rrf"], item["id"])))
-    #print(scores.values().sort(key=lambda x: (-x["rrf"], x["id"])))
-    # print(list(scores.items()))
-    # print(list(scores.items()).sort(key=lambda x: (-x["rrf"], x["id"])))
-    scores_list = list(scores.items())
-    scores_list.sort(key=lambda x: (-x[1]["rrf"], x[0]))
-    #print(scores_list)
-    #print([item[0] for item in scores_list][:top_k])
-    print(scores_list)
-    selected_item = [(item[0], item[1]["rrf"]) for item in scores_list][:top_k]
-    revoke = [{"chunk_id": item, "text": id_catalog[item], "score": score} for item, score in selected_item]
-    print(revoke)
-    return revoke
+    for c in clean_keyword:
+        found = False
+        for mc in merge_chunk:
+            if mc["chunk_id"] == c["chunk_id"]:
+                found = True
+                mc["keyword"] = c["keyword"]
+        if not found:
+            merge_chunk.append(c)
+
+    # 각 청크의 rrf 점수 추가
+    for c in merge_chunk:
+        dense_rank = c.get("dense")
+        c["score"] = 1 / (60 + dense_rank) if dense_rank is not None else 0
+
+        keyword_rank = c.get("keyword")
+        c["score"] += 1 / (60 + keyword_rank) if keyword_rank is not None else 0
+
+    # score만 가진 청크 생성
+    score_chunk = [{"chunk_id": c["chunk_id"], "text": c["text"], "score": c["score"]} for c in merge_chunk]
+
+    # 정렬 후 반환
+    return sorted(score_chunk, key=lambda x: (-x["score"], x["chunk_id"]))[:top_k]
 
 
 if __name__ == "__main__":
